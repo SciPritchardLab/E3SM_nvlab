@@ -1,4 +1,4 @@
-module climsim
+module mmf_nn_emulator
 
 use constituents,    only: pcnst
 use shr_kind_mod,    only: r8 => shr_kind_r8
@@ -62,16 +62,16 @@ use iso_fortran_env
   logical :: cb_top_levels_zero_out = .true.
   integer :: cb_n_levels_zero = 12 ! top n levels to zero out
 
-#ifdef CLIMSIM
-  public neural_net, init_neural_net, climsim_readnl, &
+#ifdef MMF_NN_EMULATOR
+  public neural_net, init_neural_net, mmf_nn_emulator_readnl, &
          cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
 #else
-  public climsim_readnl, cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
+  public mmf_nn_emulator_readnl, cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
 #endif
   
 contains
 
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
   subroutine neural_net (ptend, state, state_aphys1, pbuf, cam_in, cam_out, coszrs, solin, ztodt, lchnk)
  ! note state is meant to have the "BP" state saved earlier. 
 
@@ -343,7 +343,7 @@ end select
         safter = state%s(i,k) + s_bctend(i,k)*ztodt ! predicted DSE after NN tendency
         if (safter .lt. 0.) then ! can only happen when bctend < 0...
           s_bctend(i,k) = s_bctend(i,k) + abs(safter)/ztodt ! in which case reduce cooling rate
-          write (iulog,*) 'HEY CLIMSIM made a negative absolute temperature, corrected but BEWARE!!!'
+          write (iulog,*) 'HEY MMF_NN_EMULATOR made a negative absolute temperature, corrected but BEWARE!!!'
           write (iulog,*) '' ! [TODO] printout lat/lon and error magnitude
         endif
  
@@ -351,20 +351,20 @@ end select
         qafter = state%q(i,k,1) + q_bctend(i,k)*ztodt ! predicted vapor after NN tendency
         if (qafter .lt. 0.) then ! can only happen when qbctend < 0...
           q_bctend(i,k) = q_bctend(i,k) + abs(qafter)/ztodt ! in which case reduce drying rate
-          write (iulog,*) 'HEY CLIMSIM made a negative absolute q, corrected but BEWARE!!!'
+          write (iulog,*) 'HEY MMF_NN_EMULATOR made a negative absolute q, corrected but BEWARE!!!'
         endif
  
   ! liquid positivity:
         qafter = state%q(i,k,ixcldliq) + qc_bctend(i,k)*ztodt ! predicted liquid after NN tendency
         if (qafter .lt. 0.) then ! can only happen when qbctend < 0...
           qc_bctend(i,k) = qc_bctend(i,k) + abs(qafter)/ztodt ! in which case reduce drying rate
-          !write (iulog,*) 'HEY CLIMSIM made a negative absolute qc, corrected but BEWARE!!!'
+          !write (iulog,*) 'HEY MMF_NN_EMULATOR made a negative absolute qc, corrected but BEWARE!!!'
         endif
  ! ice positivity:
         qafter = state%q(i,k,ixcldice) + qi_bctend(i,k)*ztodt ! predicted ice after NN tendency
         if (qafter .lt. 0.) then ! can only happen when qbctend < 0...
           qi_bctend(i,k) = qi_bctend(i,k) + abs(qafter)/ztodt ! in which case reduce drying rate
-          !write (iulog,*) 'HEY CLIMSIM made a negative absolute qi, corrected but BEWARE!!!'
+          !write (iulog,*) 'HEY MMF_NN_EMULATOR made a negative absolute qi, corrected but BEWARE!!!'
         endif
       end do
     end do
@@ -389,7 +389,7 @@ end select
  
  ! ------------- 2. NN output to land forcing ---------
  !!! Sungduk: It works, but I wrote it again to add 'ocean only coupling' option
- !!!          (#CLIMSIM_OCN_ONLY)
+ !!!          (#MMF_NN_EMULATOR_OCN_ONLY)
  !!! 
  !!!    ! These are the cam_out members that are assigned in cam_export: prec_dp, snow_dp,
  !!!    ! and so saved to pbuf, instead.
@@ -404,7 +404,7 @@ end select
     do i = 1,ncol
  ! SY: debugging
  !     allowing surface coupling over ocean only
-#ifdef CLIMSIM_OCN_ONLY 
+#ifdef MMF_NN_EMULATOR_OCN_ONLY 
       if (cam_in%ocnfrac(i) .eq. 1.0_r8) then
 #endif
         cam_out%netsw(i) = output(i,6*pver+1)
@@ -415,7 +415,7 @@ end select
         cam_out%soll(i)  = output(i,6*pver+6)
         cam_out%solsd(i) = output(i,6*pver+7)
         cam_out%solld(i) = output(i,6*pver+8)
-#ifdef CLIMSIM_OCN_ONLY
+#ifdef MMF_NN_EMULATOR_OCN_ONLY
       end if
 #endif
     end do 
@@ -424,7 +424,7 @@ end select
 end subroutine neural_net
 #endif
 
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
   subroutine init_neural_net()
 
     implicit none
@@ -528,7 +528,7 @@ end subroutine neural_net
   end subroutine detect_tropopause
 
   ! Read namelist variables.
-  subroutine climsim_readnl(nlfile)
+  subroutine mmf_nn_emulator_readnl(nlfile)
 
       use namelist_utils,  only: find_group_name
       use units,           only: getunit, freeunit
@@ -538,9 +538,9 @@ end subroutine neural_net
 
       ! Local variables
       integer :: unitn, ierr, f
-      character(len=*), parameter :: subname = 'climsim_readnl'
+      character(len=*), parameter :: subname = 'mmf_nn_emulator_readnl'
       
-      namelist /climsim_nl/ inputlength, outputlength, input_rh, &
+      namelist /mmf_nn_emulator_nl/ inputlength, outputlength, input_rh, &
                            cb_partial_coupling, cb_partial_coupling_vars,&
                            cb_use_input_prectm1, &
                            cb_nn_var_combo, &
@@ -558,9 +558,9 @@ end subroutine neural_net
       if (masterproc) then
          unitn = getunit()
          open( unitn, file=trim(nlfile), status='old' )
-         call find_group_name(unitn, 'climsim_nl', status=ierr)
+         call find_group_name(unitn, 'mmf_nn_emulator_nl', status=ierr)
          if (ierr == 0) then
-            read(unitn, climsim_nl, iostat=ierr)
+            read(unitn, mmf_nn_emulator_nl, iostat=ierr)
             if (ierr /= 0) then
                call endrun(subname // ':: ERROR reading namelist')
             end if
@@ -596,7 +596,7 @@ end subroutine neural_net
       ! end if
 #endif
 
-   end subroutine climsim_readnl
+   end subroutine mmf_nn_emulator_readnl
 
   function shuffle_1d(array_1d) result(array_shuffled)
   ! Shuffling the entries of 1-d INTEGER array
@@ -621,4 +621,4 @@ end subroutine neural_net
     end do
   end function shuffle_1d
 
-end module climsim
+end module mmf_nn_emulator

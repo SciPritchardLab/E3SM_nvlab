@@ -59,7 +59,7 @@ module cam_comp
   type(physics_buffer_desc), pointer :: pbuf2d(:,:) => null()
   type(cnd_diag_t),          pointer :: phys_diag(:) => null()
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
   type(physics_state), pointer :: phys_state_aphys1(:) => null() ! save phys_state after call to phys_run1 and before calling ac and dycore
   type(physics_state), pointer :: phys_state_mmf(:) => null() ! to record state of crm grid-mean state 
   ! place holder for phys_state_aphys1 and phys_state_mmf
@@ -198,7 +198,7 @@ subroutine cam_init( cam_out, cam_in, mpicom_atm, &
 
    call t_startf('phys_init')
    call phys_init( phys_state, phys_tend, pbuf2d, cam_out )
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    call physics_type_alloc(phys_state_aphys1, phys_tend_placeholder, begchunk, endchunk, pcols)
    call physics_type_alloc(phys_state_mmf, physphys_tend_placeholder_mmf, begchunk, endchunk, pcols)
    do lchnk = begchunk, endchunk
@@ -239,15 +239,15 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
 !
 !-----------------------------------------------------------------------
    
-#ifdef CLIMSIM
-   use physpkg,          only: phys_run1, climsim_driver
+#ifdef MMF_NN_EMULATOR
+   use physpkg,          only: phys_run1, mmf_nn_emulator_driver
 #else
    use physpkg,          only: phys_run1
 #endif 
-   ! use physpkg,          only: phys_run1, climsim_driver
+   ! use physpkg,          only: phys_run1, mmf_nn_emulator_driver
 
    use stepon,           only: stepon_run1
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    use physics_types,    only: physics_type_alloc, physics_state_alloc, physics_state_dealloc, physics_state_copy
 #endif
 
@@ -268,7 +268,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    integer, intent(in), optional :: dy   ! Simulation day
    integer, intent(in), optional :: sec  ! Seconds into current simulation day
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    integer :: lchnk
    integer :: i, j, ierr=0
    integer :: ptracker, ncol
@@ -291,7 +291,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
       call t_stampf (wcstart, usrstart, sysstart)
    end if
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    ! Allocate memory dynamically
    allocate(phys_state_tmp(begchunk:endchunk), stat=ierr)
    if (ierr /= 0) then
@@ -332,7 +332,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    call t_startf ('phys_run1')
 #if defined(MMF_SAMXX) || defined(MMF_PAM)
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    !update time tracker for adv forcing
    ptracker = phys_state(begchunk)%ntracker
    do lchnk=begchunk,endchunk
@@ -353,7 +353,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
       phys_state_tmp(lchnk)%q(:,:,:) = phys_state(lchnk)%q(:,:,:)
    end do
 
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
    ! update adv forcing for mmf state
    ptracker = phys_state_mmf(begchunk)%ntracker
    do lchnk=begchunk,endchunk
@@ -383,22 +383,22 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
       phys_state_mmf(lchnk)%q_adv(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_adv(:,:,:,:)
       phys_state_mmf(lchnk)%q_phy(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_phy(:,:,:,:)
    end do
-#endif   /* endif CLIMSIM for updating mmf state*/
+#endif   /* endif MMF_NN_EMULATOR for updating mmf state*/
 
 #ifdef MMF_ML_TRAINING
    if (present(yr).and.present(mn).and.present(dy).and.present(sec)) then
       call write_ml_training(pbuf2d, phys_state, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 1) ! this will be saved in 'mli' file
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
       call write_ml_training(pbuf2d, phys_state_mmf, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 3) ! this will be saved in 'mlis' file
-#endif /* CLIMSIM */
+#endif /* MMF_NN_EMULATOR */
    end if
 #endif /* MMF_ML_TRAINING */
 
-#endif /* endif MMF_ML_TRAINING || CLIMSIM */
+#endif /* endif MMF_ML_TRAINING || MMF_NN_EMULATOR */
 
 
-#ifdef CLIMSIM
-   call climsim_driver(phys_state, phys_state_aphys1, phys_state_mmf, dtime, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_mmf)
+#ifdef MMF_NN_EMULATOR
+   call mmf_nn_emulator_driver(phys_state, phys_state_aphys1, phys_state_mmf, dtime, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_mmf)
 #else
    call phys_run1(phys_state, dtime, phys_tend, pbuf2d,  cam_in, cam_out)
 #endif 
@@ -408,7 +408,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
 #endif
 
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    ! after calling NN/CRM, update the physics tendencies
    do lchnk=begchunk,endchunk
       ! copy phys_state to phys_state_aphys1 for t, u, v, s, q
@@ -436,7 +436,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
       end do
    end do
 
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
    !update phy tendencies for phys_state_mmf
    do lchnk=begchunk,endchunk
       do i=1,ptracker
@@ -452,9 +452,9 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
          end if
       end do
    end do
-#endif /* endif CLIMSIM for updating phys tendencies in mmf state*/
+#endif /* endif MMF_NN_EMULATOR for updating phys tendencies in mmf state*/
 
-#endif /* endif MMF_ML_TRAINING || CLIMSIM */
+#endif /* endif MMF_ML_TRAINING || MMF_NN_EMULATOR */
 
    call t_stopf  ('phys_run1')
 
@@ -464,13 +464,13 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
 #ifdef MMF_ML_TRAINING
    if (present(yr).and.present(mn).and.present(dy).and.present(sec)) then
       call write_ml_training(pbuf2d, phys_state, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 2) ! this will be saved in 'mlo' file
-#ifdef CLIMSIM
+#ifdef MMF_NN_EMULATOR
       call write_ml_training(pbuf2d, phys_state_mmf, phys_tend, cam_in, cam_out_mmf, yr, mn, dy, sec, 4) ! this will be saved in 'mlos' file
-#endif /* CLIMSIM */
+#endif /* MMF_NN_EMULATOR */
    end if
 #endif /* MMF_ML_TRAINING */
 
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    do lchnk=begchunk,endchunk
       call physics_state_dealloc(phys_state_tmp(lchnk))
       call physics_state_dealloc(phys_state_mmf_backup(lchnk))
@@ -699,7 +699,7 @@ subroutine cam_final( cam_out, cam_in )
    call t_startf ('phys_final')
 #if defined(MMF_SAMXX) || defined(MMF_PAM)
    call phys_final( phys_state, phys_tend , pbuf2d )
-#if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
+#if defined(MMF_ML_TRAINING) || defined(MMF_NN_EMULATOR)
    do lchnk=begchunk,endchunk
       call physics_state_dealloc(phys_state_aphys1(lchnk))
       call physics_state_dealloc(phys_state_mmf(lchnk))

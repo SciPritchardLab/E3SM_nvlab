@@ -23,8 +23,8 @@ scratch_dir = os.getenv('SCRATCH')
 case_dir = scratch_dir+'/e3sm_mlt_scratch/'
 src_dir  = top_dir+'/nvidia_codes/E3SM_private/' # branch => whannah/mmf/ml-training
 # user_cpp = '-DMMF_ML_TRAINING' # for saving ML variables
-# user_cpp = '-DCLIMSIM -DCLIMSIM_DIAG_PARTIAL -DCLIMSIMDEBUG -DTORCH_CLIMSIM_TEST' # NN hybrid test
-user_cpp = '-DCLIMSIM' # NN hybrid test
+# user_cpp = '-DMMF_NN_EMULATOR -DMMF_NN_EMULATOR_DIAG_PARTIAL -DMMF_NN_EMULATORDEBUG -DTORCH_MMF_NN_EMULATOR_TEST' # NN hybrid test
+user_cpp = '-DMMF_NN_EMULATOR' # NN hybrid test
 # # src_mod_atm_dir = '/global/homes/s/sungduk/repositories/ClimSim-E3SM-Hybrid/'
 pytorch_fortran_path = '/global/cfs/cdirs/m4331/shared/pytorch-fortran-gnu-cuda11.7/gnu-cuda11.7/install'
 os.environ["pytorch_proxy_ROOT"] = pytorch_fortran_path
@@ -57,7 +57,7 @@ ne,npg=4,2;  num_nodes=1  ; grid=f'ne{ne}pg{npg}_ne{ne}pg{npg}'
 compset,arch   = 'F2010-MMF1','GNUGPU'
 # compset,arch   = 'FAQP-MMF1','GNUGPU'
 # compset,arch   = 'F2010-MMF1','CORI';
-# (MMF1: Note that MMF_VT is tunred off for CLIMSIM in $E3SMROOT/components/eam/cime_config/config_component.xml)  
+# (MMF1: Note that MMF_VT is tunred off for MMF_NN_EMULATOR in $E3SMROOT/components/eam/cime_config/config_component.xml)  
 
 queue = 'regular'
 #queue = 'debug'
@@ -69,7 +69,7 @@ if debug_mode: case_list.append('debug')
 
 case='.'.join(case_list)
 #---------------------------------------------------------------------------------------------------
-# CLIMSIM
+# MMF_NN_EMULATOR
 # f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models/v4_unet_baseline_fulldata/model.pt'
 f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models_wrapper/v2rh_mlp_nonaggressive_cliprh_huber_rop_3l_lr1em3_r2.pt'
 
@@ -143,7 +143,7 @@ state_debug_checks = .true.
 do_aerosol_rad = .false.
 /
 
-&climsim_nl
+&mmf_nn_emulator_nl
 inputlength     = 557
 outputlength    = 368
 cb_nn_var_combo = 'v2'
