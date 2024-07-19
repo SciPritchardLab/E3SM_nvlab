@@ -15,7 +15,7 @@ acct = 'm4331'
 # case_prefix = 'dagger2_exp1_iter1_alphap5_test'
 # case_prefix = 'corrected_nndebug_prune_clip_seed'
 case_prefix = 'v5_noclassifier_huber_1y_noaggressive_minimum_rop2_quick'
-exe_refcase = 'v5_noclassifier_huber_1y_noaggressive_minimum_rop2'
+# exe_refcase = 'v5_noclassifier_huber_1y_noaggressive_minimum_rop2'
 # Added extra physics_state and cam_out variables.
 
 top_dir  = os.getenv('HOME')
@@ -47,8 +47,8 @@ debug_mode = False
 dtime = 1200 # set to 0 to use a default value 
 
 #stop_opt,stop_n,resub,walltime = 'nmonths',1, 1, '00:30:00'
-stop_opt,stop_n,resub,walltime = 'nmonths',1, 0,'00:30:00'
-#stop_opt,stop_n,resub,walltime = 'ndays',35, 0,'00:30:00'
+#stop_opt,stop_n,resub,walltime = 'nmonths',1, 0,'00:30:00'
+stop_opt,stop_n,resub,walltime = 'ndays',35, 0,'00:30:00'
 
 ne,npg=4,2;  num_nodes=1  ; grid=f'ne{ne}pg{npg}_ne{ne}pg{npg}'
 # ne,npg=30,2; num_nodes=32 ; grid=f'ne{ne}pg{npg}_ne{ne}pg{npg}'
@@ -70,23 +70,16 @@ if debug_mode: case_list.append('debug')
 case='.'.join(case_list)
 #---------------------------------------------------------------------------------------------------
 # CLIMSIM
-# f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models/v4_unet_baseline_fulldata/model.pt'
 f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models_wrapper/v5_unet_nonaggressive_cliprh_huber_rop2_r2.pt'
-f_strato_lev = 15
 
-f_decouple_cloud = '.false.'
 cb_spinup_step = 5
-f_do_limiter = '.false.'
-f_cb_zeroqn_strat = '.true.'
-cb_overwrite_qnstrat = '.false.'
+f_cb_strato_water_constraint = '.true.'
 
 f_cb_do_ramp = '.false.'
 f_cb_ramp_option = 'step'
 cb_ramp_factor = 1.0
 cb_ramp_step_0steps = 80
 cb_ramp_step_1steps = 10
-cb_do_clip = '.true.'
-cb_do_aggressive_pruning = '.false.'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -155,11 +148,7 @@ outputlength    = 368
 cb_nn_var_combo = 'v4'
 input_rh        = .true.
 cb_torch_model  = '{f_torch_model}'
-
-strato_lev = {f_strato_lev}
-cb_decouple_cloud = {f_decouple_cloud}
 cb_spinup_step = {cb_spinup_step}
-cb_do_limiter = {f_do_limiter}
 cb_partial_coupling = .false.
 cb_partial_coupling_vars = 'ptend_t', 'ptend_q0001','ptend_q0002','ptend_q0003', 'ptend_u', 'ptend_v', 'cam_out_PRECC', 'cam_out_PRECSC', 'cam_out_NETSW', 'cam_out_FLWDS', 'cam_out_SOLS', 'cam_out_SOLL', 'cam_out_SOLSD', 'cam_out_SOLLD' 
 cb_do_ramp = {f_cb_do_ramp}
@@ -167,11 +156,7 @@ cb_ramp_option = '{f_cb_ramp_option}'
 cb_ramp_factor = {cb_ramp_factor}
 cb_ramp_step_0steps = {cb_ramp_step_0steps}
 cb_ramp_step_1steps = {cb_ramp_step_1steps}
-cb_do_clip = {cb_do_clip}
-cb_do_aggressive_pruning = {cb_do_aggressive_pruning}
-
-cb_zeroqn_strat = {f_cb_zeroqn_strat}
-cb_overwrite_qnstrat = {cb_overwrite_qnstrat}
+cb_strato_water_constraint = {f_cb_strato_water_constraint}
 /
 
 &cam_history_nl
@@ -205,13 +190,13 @@ if config :
    if clean : run_cmd('./case.setup --clean')
    run_cmd('./case.setup --reset')
 #---------------------------------------------------------------------------------------------------
-# if build : 
-#    if debug_mode: run_cmd('./xmlchange --file env_build.xml --id DEBUG --val TRUE ')
-#    if clean : run_cmd('./case.build --clean')
-#    run_cmd('./case.build')
+if build : 
+   if debug_mode: run_cmd('./xmlchange --file env_build.xml --id DEBUG --val TRUE ')
+   if clean : run_cmd('./case.build --clean')
+   run_cmd('./case.build')
 
-run_cmd(f'cp /pscratch/sd/z/zeyuanhu/e3sm_mlt_scratch/{exe_refcase}/build/e3sm.exe ./build/')
-run_cmd('./xmlchange BUILD_COMPLETE=TRUE')
+# run_cmd(f'cp /pscratch/sd/z/zeyuanhu/e3sm_mlt_scratch/{exe_refcase}/build/e3sm.exe ./build/')
+# run_cmd('./xmlchange BUILD_COMPLETE=TRUE')
 #---------------------------------------------------------------------------------------------------
 if submit : 
    if 'queue' in locals(): run_cmd(f'./xmlchange JOB_QUEUE={queue}')

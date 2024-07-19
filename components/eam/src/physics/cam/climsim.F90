@@ -32,31 +32,14 @@ use iso_fortran_env
   integer :: inputlength  = 1525     ! length of NN input vector
   integer :: outputlength = 368     ! length of NN output vector
   logical :: input_rh     = .false.  ! toggle to switch from q --> RH input
-  logical :: cb_decouple_cloud     = .false.  ! toggle to set all cloud variables to zero in the NN inputs
-  logical :: qinput_log   = .false.  ! toggle to switch from qc/qi --> log10(1+1e6*qc/i) input ! not implemented in the latested version of NN, should be removed
-  logical :: qinput_prune = .false.  ! prune qc/qi (v2/v4 NN) or qn (total cloud, v5 NN) input in stratosphere
-  logical :: qoutput_prune = .false. ! prune qv/qc/qi and/or u/v tendencies output in stratosphere
-  logical :: uoutput_prune = .false. ! prune u/v tendencies output in stratosphere in v5 NN
-  integer :: strato_lev = 15 ! stratospheric level used for pruning
   integer :: cb_spinup_step = 72 
   logical :: cb_use_input_prectm1 = .false.  ! use previous timestep PRECT for input variable 
-  character(len=256)    :: cb_inp_sub     ! absolute filepath for a inp_sub.txt
-  character(len=256)    :: cb_inp_div     ! absolute filepath for a inp_div.txt
-  character(len=256)    :: cb_out_scale   ! absolute filepath for a out_scale.txt
   logical :: cb_partial_coupling  = .false.
   character(len=fieldname_lenp2) :: cb_partial_coupling_vars(pflds)
-  character(len=256) :: cb_nn_var_combo = 'v4' ! nickname for a specific NN in/out variable combination, currently support v2, v4 or v5
+  character(len=256) :: cb_nn_var_combo = 'v4' ! nickname for a specific NN in/out variable combination, currently support v2 or v4
   character(len=256)    :: cb_torch_model   ! absolute filepath for a torchscript model txt file
-  character(len=256)    :: cb_torch_model_class   ! absolute filepath for a torchscript classification model txt file
-  logical :: cb_apply_classifier = .true. ! apply classifier to the NN microphysics output! if set false, classifier will still do inference but not applied to the final output
-  character(len=256)    :: cb_qc_lbd   ! absolute filepath for qc_lbd for exponential input transformation
-  character(len=256)    :: cb_qi_lbd   ! absolute filepath for qi_lbd for exponential input transformation
-  character(len=256)    :: cb_qn_lbd   ! absolute filepath for qn_lbd for exponential input transformation
-  character(len=256)    :: cb_limiter_lower  ! absolute filepath for the NN output limiter lower bound
-  character(len=256)    :: cb_limiter_upper  ! absolute filepath for the NN output limiter upper bound
-  logical :: cb_do_limiter     = .false.  ! toggle to use limiter for NN output
 
-  ! output to mix the NN output with an SP prediction with customized partition scheduling
+  ! option to mix the NN output with an SP prediction with customized partition scheduling
   !tendency sent to GCM grid would be: ratio * NN output + (1-ratio) * SP output
   logical :: cb_do_ramp = .false. ! option to turn on customized ratio scheduling
   real(r8) :: cb_ramp_factor = 1.0
@@ -69,40 +52,11 @@ use iso_fortran_env
   integer :: cb_ramp_linear_steps = 0
   integer :: cb_ramp_step_0steps = 10
   integer :: cb_ramp_step_1steps = 20
-
-  ! clip the input to the NN
-  ! if cb_do_clip = .true., and cb_clip_rhonly = .false., clip adv/phys tendencies to [-3,3], clip rh to [0,1.2]
-  ! if cb_do_clip = .true., and cb_clip_rhonly = .true., only clip rh to [0,1.2]
-  logical :: cb_do_clip = .false.
-  logical :: cb_clip_rhonly = .false.
   
-  logical :: cb_solin_nolag  = .false. ! option to use SOLIN/coszr without time lag in the NN input. should be set to false since the CRM use previous step's radiation as forcing
-  logical :: cb_zeroqn_strat = .false. ! zero out cloud (qc and qi) above tropopause in the NN output
-  logical :: cb_overwrite_qnstrat = .true. ! option to add any stratosphere constrain (e.g., to remove cloud above tropopause if cb_zeroqn_strat; or setting dqn/dt=0 if not cb_zeroqn_strat (don't recommend))
-  real(r8) :: dtheta_thred = 10.0 ! threshold for determine the tropopause (currently is p<400hPa and dtheta/dz>dtheta_thred = 10K/km)
-
-  ! aggressively prune the NN input in stratosphere (only implemented for v4/v5 options)
-  ! if cb_do_aggressive_pruning = .true., prune qv/qc/qi/qn/u/v, all advective tendencies, and all physics tendencies above strato_lev to 0 in the NN input
-  ! for v4 NN, will also prune qc to lev 30
-  logical :: cb_do_aggressive_pruning = .false. ! aggressively prune the NN input in stratosphere
-  
-  ! if strato_lev_qinput>0, will further prune qv/qi/qn to strato_lev_qinput
-  integer :: strato_lev_qinput = -1
-
-  ! if strato_lev_tinput>0, will prune t to strato_lev_tinput
-  integer :: strato_lev_tinput = -1
+  logical :: cb_strato_water_constraint = .false. ! zero out cloud (qc and qi) above tropopause in the NN output
+  real(r8) :: dtheta_thred = 10.0 ! threshold for determine the tropopause (currently is p<400hPa and dtheta/dz>dtheta_thred = 10K/km) 
 
   type(torch_module), allocatable :: torch_mod(:)
-  real(r8), allocatable :: inp_sub(:)
-  real(r8), allocatable :: inp_div(:)
-  real(r8), allocatable :: out_scale(:)
-  real(r8), allocatable :: qc_lbd(:)
-  real(r8), allocatable :: qi_lbd(:)
-  real(r8), allocatable :: qn_lbd(:)
-  real(r8), allocatable :: limiter_lower(:)
-  real(r8), allocatable :: limiter_upper(:)
-
-
 
   ! local
   logical :: cb_top_levels_zero_out = .true.
@@ -110,9 +64,9 @@ use iso_fortran_env
 
 #ifdef CLIMSIM
   public neural_net, init_neural_net, climsim_readnl, &
-         cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, cb_solin_nolag
+         cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
 #else
-  public climsim_readnl, cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, cb_solin_nolag
+  public climsim_readnl, cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
 #endif
   
 contains
@@ -158,10 +112,6 @@ contains
    real(real32) :: input_torch(inputlength, pcols)
    real(real32), pointer :: output_torch(:, :)
    real(r8) :: math_pi
-   real(r8) :: liq_partition
-   real(r8) :: qn_log_tmp
-   real(real32) :: temperature_new(pcols,pver)
-   real(real32) :: qn_new(pcols,pver)
 
    math_pi = 3.14159265358979323846_r8
 
@@ -256,6 +206,7 @@ select case (to_lower(trim(cb_nn_var_combo)))
       input(:ncol,3*pver+1:4*pver) = state%q(1:ncol,1:pver,ixcldice)
       input(:ncol,4*pver+1:5*pver) = state%u(1:ncol,1:pver)          ! state_u
       input(:ncol,5*pver+1:6*pver) = state%v(1:ncol,1:pver)          ! state_v
+      ! state dynamics tendencies (large-scale forcings)
       input(:ncol,6*pver+1:7*pver) = (state%t(1:ncol,1:pver)-state_aphys1%t(1:ncol,1:pver))/1200. ! state_t_dyn
       ! state_q0_dyn
       input(:ncol,7*pver+1:8*pver) = (state%q(1:ncol,1:pver,1)-state_aphys1%q(1:ncol,1:pver,1) + state%q(1:ncol,1:pver,ixcldliq)-state_aphys1%q(1:ncol,1:pver,ixcldliq) + state%q(1:ncol,1:pver,ixcldice)-state_aphys1%q(1:ncol,1:pver,ixcldice))/1200.
@@ -297,14 +248,14 @@ select case (to_lower(trim(cb_nn_var_combo)))
       input(:ncol,25*pver+15) = cam_in%OCNFRAC(:ncol)                ! cam_in_OCNFRAC
       input(:ncol,25*pver+16) = cam_in%SNOWHICE(:ncol)               ! cam_in_SNOWHICE
       input(:ncol,25*pver+17) = cam_in%SNOWHLAND(:ncol)              ! cam_in_SNOWHLAND
-      !5 placeholder for future input
+      !5 placeholder for future input (which we plan to use some 2d vars at t-1, but in the end did not implement)
       input(:ncol,25*pver+18:25*pver+22) = 0._r8
       ! cos lat and sin lat
       do i = 1,ncol ! lat is get_lat_p(lchnk,i), 23/24 needs cos/sin
         input(i,25*pver+23) = cos(get_rlat_p(lchnk,i))
         input(i,25*pver+24) = sin(get_rlat_p(lchnk,i))
       end do
-      input(:ncol,25*pver+25) = 0._r8               ! icol ! can be 1-384 in future
+      input(:ncol,25*pver+25) = 0._r8               ! icol ! can be 1-384 in future but not implemented yet
       ! RH conversion
       if (input_rh) then ! relative humidity conversion for input
          do i = 1,ncol
@@ -351,7 +302,7 @@ end select
       ! k=6*pver+2
       ! output(i,k) = max(output(i,k), tiny(output(i,k))) ! flwds
       !                                                   ! preventing flwds==0 error
-      
+
       ! zero out surface solar fluxes when local time is at night
       if (coszrs(i) .le. 0.) then
         output(i,6*pver+1) = 0. ! netsw
@@ -372,8 +323,8 @@ end select
     u_bctend (:ncol,1:pver) = output(1:ncol,4*pver+1:5*pver)       ! m/s/s
     v_bctend (:ncol,1:pver) = output(1:ncol,5*pver+1:6*pver)       ! m/s/s
  
- ! deny any moisture activity in the stratosphere:
-    if (cb_zeroqn_strat) then
+ ! deny any moisture activity and remove all clouds in the stratosphere:
+    if (cb_strato_water_constraint) then
      do i=1,ncol
        call detect_tropopause(state%t(i,:),state%exner(i,:),state%zm(i,:),state%pmid(i,:),idx_trop(i))
        q_bctend (i,1:idx_trop(i)) = 0.
@@ -590,15 +541,13 @@ end subroutine neural_net
       character(len=*), parameter :: subname = 'climsim_readnl'
       
       namelist /climsim_nl/ inputlength, outputlength, input_rh, &
-                           cb_inp_sub, cb_inp_div, cb_out_scale, &
                            cb_partial_coupling, cb_partial_coupling_vars,&
                            cb_use_input_prectm1, &
-                           cb_nn_var_combo, qinput_log, qinput_prune, qoutput_prune, uoutput_prune, strato_lev, &
-                           cb_torch_model, cb_qc_lbd, cb_qi_lbd, cb_qn_lbd, cb_decouple_cloud, cb_spinup_step, &
-                           cb_limiter_lower, cb_limiter_upper, cb_do_limiter, cb_do_ramp, cb_ramp_linear_steps, &
+                           cb_nn_var_combo, &
+                           cb_torch_model, cb_spinup_step, &
+                           cb_do_ramp, cb_ramp_linear_steps, &
                            cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, &
-                           cb_do_aggressive_pruning, cb_do_clip, cb_solin_nolag, cb_clip_rhonly,  &
-                           strato_lev_qinput, strato_lev_tinput, cb_zeroqn_strat, cb_overwrite_qnstrat, dtheta_thred, cb_apply_classifier, cb_torch_model_class
+                           cb_strato_water_constraint, dtheta_thred
 
       ! Initialize 'cb_partial_coupling_vars'
       do f = 1, pflds
@@ -626,44 +575,19 @@ end subroutine neural_net
       call mpibcast(outputlength, 1,                 mpiint,  0, mpicom)
       call mpibcast(input_rh,     1,                 mpilog,  0, mpicom)
       call mpibcast(cb_use_input_prectm1,1,          mpilog,  0, mpicom)
-      call mpibcast(cb_inp_sub,   len(cb_inp_sub),   mpichar, 0, mpicom)
-      call mpibcast(cb_inp_div,   len(cb_inp_div),   mpichar, 0, mpicom)
-      call mpibcast(cb_out_scale, len(cb_out_scale), mpichar, 0, mpicom)
       call mpibcast(cb_partial_coupling, 1,          mpilog,  0, mpicom)
       call mpibcast(cb_partial_coupling_vars, len(cb_partial_coupling_vars(1))*pflds, mpichar, 0, mpicom)
       call mpibcast(cb_nn_var_combo, len(cb_nn_var_combo), mpichar,  0, mpicom)
-      call mpibcast(qinput_log,   1, mpilog,  0, mpicom)
-      call mpibcast(qinput_prune,   1, mpilog,  0, mpicom)
-      call mpibcast(qoutput_prune,   1, mpilog,  0, mpicom)
-      call mpibcast(uoutput_prune,   1, mpilog,  0, mpicom)
-      call mpibcast(strato_lev,   1, mpiint,  0, mpicom)
       call mpibcast(cb_torch_model, len(cb_torch_model), mpichar, 0, mpicom)
-      call mpibcast(cb_qc_lbd, len(cb_qc_lbd), mpichar, 0, mpicom)
-      call mpibcast(cb_qi_lbd, len(cb_qi_lbd), mpichar, 0, mpicom)
-      call mpibcast(cb_qn_lbd, len(cb_qn_lbd), mpichar, 0, mpicom)
-      call mpibcast(cb_decouple_cloud,     1,                 mpilog,  0, mpicom)
       call mpibcast(cb_spinup_step,   1, mpiint,  0, mpicom)
-
-      call mpibcast(cb_limiter_lower, len(cb_limiter_lower), mpichar, 0, mpicom)
-      call mpibcast(cb_limiter_upper, len(cb_limiter_upper), mpichar, 0, mpicom)
-      call mpibcast(cb_do_limiter,     1,                 mpilog,  0, mpicom)
       call mpibcast(cb_do_ramp, 1,                  mpilog,  0, mpicom)
       call mpibcast(cb_ramp_linear_steps, 1,            mpiint,  0, mpicom)
       call mpibcast(cb_ramp_option, len(cb_ramp_option), mpichar,  0, mpicom)
       call mpibcast(cb_ramp_factor, 1,            mpir8,  0, mpicom)
       call mpibcast(cb_ramp_step_0steps, 1,            mpiint,  0, mpicom)
       call mpibcast(cb_ramp_step_1steps, 1,            mpiint,  0, mpicom)
-      call mpibcast(cb_do_clip,     1,                 mpilog,  0, mpicom)
-      call mpibcast(cb_do_aggressive_pruning,     1,                 mpilog,  0, mpicom)
-      call mpibcast(cb_solin_nolag, 1,          mpilog,  0, mpicom)
-      call mpibcast(cb_clip_rhonly,     1,                 mpilog,  0, mpicom)
-      call mpibcast(strato_lev_qinput,   1, mpiint,  0, mpicom)
-      call mpibcast(strato_lev_tinput,   1, mpiint,  0, mpicom)
-      call mpibcast(cb_zeroqn_strat,   1, mpilog,  0, mpicom)
-      call mpibcast(cb_overwrite_qnstrat,   1, mpilog,  0, mpicom)
+      call mpibcast(cb_strato_water_constraint,   1, mpilog,  0, mpicom)
       call mpibcast(dtheta_thred, 1,            mpir8,  0, mpicom)
-      call mpibcast(cb_apply_classifier,     1,                 mpilog,  0, mpicom)
-      call mpibcast(cb_torch_model_class, len(cb_torch_model_class), mpichar, 0, mpicom)
 
 
       ! [TODO] check ierr for each mpibcast call

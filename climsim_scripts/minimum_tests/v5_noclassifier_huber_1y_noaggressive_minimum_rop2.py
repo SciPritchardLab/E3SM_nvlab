@@ -70,24 +70,16 @@ if debug_mode: case_list.append('debug')
 case='.'.join(case_list)
 #---------------------------------------------------------------------------------------------------
 # CLIMSIM
-# f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models/v4_unet_baseline_fulldata/model.pt'
 f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models_wrapper/v5_unet_nonaggressive_cliprh_huber_rop2_r2.pt'
-f_strato_lev = 15
 
-f_decouple_cloud = '.false.'
 cb_spinup_step = 5
-f_do_limiter = '.false.'
-f_cb_zeroqn_strat = '.true.'
-cb_overwrite_qnstrat = '.false.'
+f_cb_strato_water_constraint = '.true.'
 
 f_cb_do_ramp = '.false.'
 f_cb_ramp_option = 'step'
 cb_ramp_factor = 1.0
 cb_ramp_step_0steps = 80
 cb_ramp_step_1steps = 10
-cb_do_clip = '.true.'
-cb_do_aggressive_pruning = '.false.'
-
 
 #---------------------------------------------------------------------------------------------------
 print('\n  case : '+case+'\n')
@@ -155,11 +147,7 @@ outputlength    = 368
 cb_nn_var_combo = 'v4'
 input_rh        = .true.
 cb_torch_model  = '{f_torch_model}'
-
-strato_lev = {f_strato_lev}
-cb_decouple_cloud = {f_decouple_cloud}
 cb_spinup_step = {cb_spinup_step}
-cb_do_limiter = {f_do_limiter}
 cb_partial_coupling = .false.
 cb_partial_coupling_vars = 'ptend_t', 'ptend_q0001','ptend_q0002','ptend_q0003', 'ptend_u', 'ptend_v', 'cam_out_PRECC', 'cam_out_PRECSC', 'cam_out_NETSW', 'cam_out_FLWDS', 'cam_out_SOLS', 'cam_out_SOLL', 'cam_out_SOLSD', 'cam_out_SOLLD' 
 cb_do_ramp = {f_cb_do_ramp}
@@ -167,11 +155,7 @@ cb_ramp_option = '{f_cb_ramp_option}'
 cb_ramp_factor = {cb_ramp_factor}
 cb_ramp_step_0steps = {cb_ramp_step_0steps}
 cb_ramp_step_1steps = {cb_ramp_step_1steps}
-cb_do_clip = {cb_do_clip}
-cb_do_aggressive_pruning = {cb_do_aggressive_pruning}
-
-cb_zeroqn_strat = {f_cb_zeroqn_strat}
-cb_overwrite_qnstrat = {cb_overwrite_qnstrat}
+cb_strato_water_constraint = {f_cb_strato_water_constraint}
 /
 
 &cam_history_nl

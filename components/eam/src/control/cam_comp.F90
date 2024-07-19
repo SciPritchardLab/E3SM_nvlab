@@ -61,11 +61,11 @@ module cam_comp
 
 #if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
   type(physics_state), pointer :: phys_state_aphys1(:) => null() ! save phys_state after call to phys_run1 and before calling ac and dycore
-  type(physics_state), pointer :: phys_state_sp(:) => null() ! to record state of crm grid-mean state 
-  ! place holder for phys_state_aphys1 and phys_state_sp
+  type(physics_state), pointer :: phys_state_mmf(:) => null() ! to record state of crm grid-mean state 
+  ! place holder for phys_state_aphys1 and phys_state_mmf
   ! easy to been initialized by: call physics_type_alloc(phys_state_aphys1, phys_tend_placeholder, begchunk, endchunk, pcols)
   type(physics_tend ), pointer :: phys_tend_placeholder(:) => null()
-  type(physics_tend ), pointer :: phys_tend_placeholder_sp(:) => null()
+  type(physics_tend ), pointer :: physphys_tend_placeholder_mmf(:) => null()
 #endif
 
   real(r8) :: wcstart, wcend     ! wallclock timestamp at start, end of timestep
@@ -200,10 +200,10 @@ subroutine cam_init( cam_out, cam_in, mpicom_atm, &
    call phys_init( phys_state, phys_tend, pbuf2d, cam_out )
 #if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
    call physics_type_alloc(phys_state_aphys1, phys_tend_placeholder, begchunk, endchunk, pcols)
-   call physics_type_alloc(phys_state_sp, phys_tend_placeholder_sp, begchunk, endchunk, pcols)
+   call physics_type_alloc(phys_state_mmf, physphys_tend_placeholder_mmf, begchunk, endchunk, pcols)
    do lchnk = begchunk, endchunk
       call physics_state_set_grid(lchnk, phys_state_aphys1(lchnk))
-       call physics_state_set_grid(lchnk, phys_state_sp(lchnk))
+       call physics_state_set_grid(lchnk, phys_state_mmf(lchnk))
    end do
 #endif
    call t_stopf('phys_init')
@@ -274,8 +274,8 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    integer :: ptracker, ncol
 
    type(physics_state), allocatable, dimension(:)  :: phys_state_tmp
-   type(physics_state), allocatable, dimension(:)  :: phys_state_sp_backup
-   type(cam_out_t),     dimension(begchunk:endchunk)  :: cam_out_sp
+   type(physics_state), allocatable, dimension(:)  :: phys_state_mmf_backup
+   type(cam_out_t),     dimension(begchunk:endchunk)  :: cam_out_mmf
 #endif
 
 #if ( defined SPMD )
@@ -299,15 +299,15 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
       write(iulog,*) 'Error allocating phys_state_tmp error = ',ierr
    end if
 
-   allocate(phys_state_sp_backup(begchunk:endchunk), stat=ierr)
+   allocate(phys_state_mmf_backup(begchunk:endchunk), stat=ierr)
    if (ierr /= 0) then
       ! Handle allocation error
-      write(iulog,*) 'Error allocating phys_state_sp_backup error = ',ierr
+      write(iulog,*) 'Error allocating phys_state_mmf_backup error = ',ierr
    end if
 
    do lchnk=begchunk,endchunk
       call physics_state_alloc(phys_state_tmp(lchnk),lchnk,pcols)
-      call physics_state_alloc(phys_state_sp_backup(lchnk),lchnk,pcols)
+      call physics_state_alloc(phys_state_mmf_backup(lchnk),lchnk,pcols)
    end do
 #endif
 
@@ -354,42 +354,42 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    end do
 
 #ifdef CLIMSIM
-   ! update adv forcing for sp state
-   ptracker = phys_state_sp(begchunk)%ntracker
+   ! update adv forcing for mmf state
+   ptracker = phys_state_mmf(begchunk)%ntracker
    do lchnk=begchunk,endchunk
       do i=1,ptracker
          j = 1+ptracker-i
          if (j>1) then
-            phys_state_sp(lchnk)%t_adv(j,:,:) = phys_state_sp(lchnk)%t_adv(j-1,:,:)
-            phys_state_sp(lchnk)%u_adv(j,:,:) = phys_state_sp(lchnk)%u_adv(j-1,:,:)
-            phys_state_sp(lchnk)%q_adv(j,:,:,:) = phys_state_sp(lchnk)%q_adv(j-1,:,:,:)
+            phys_state_mmf(lchnk)%t_adv(j,:,:) = phys_state_mmf(lchnk)%t_adv(j-1,:,:)
+            phys_state_mmf(lchnk)%u_adv(j,:,:) = phys_state_mmf(lchnk)%u_adv(j-1,:,:)
+            phys_state_mmf(lchnk)%q_adv(j,:,:,:) = phys_state_mmf(lchnk)%q_adv(j-1,:,:,:)
          else
-            phys_state_sp(lchnk)%t_adv(j,:,:) = (phys_state(lchnk)%t(:,:) - phys_state_sp(lchnk)%t(:,:))/1200.
-            phys_state_sp(lchnk)%u_adv(j,:,:) = (phys_state(lchnk)%u(:,:) - phys_state_sp(lchnk)%u(:,:))/1200.
-            phys_state_sp(lchnk)%q_adv(j,:,:,:) = (phys_state(lchnk)%q(:,:,:) - phys_state_sp(lchnk)%q(:,:,:))/1200.
+            phys_state_mmf(lchnk)%t_adv(j,:,:) = (phys_state(lchnk)%t(:,:) - phys_state_mmf(lchnk)%t(:,:))/1200.
+            phys_state_mmf(lchnk)%u_adv(j,:,:) = (phys_state(lchnk)%u(:,:) - phys_state_mmf(lchnk)%u(:,:))/1200.
+            phys_state_mmf(lchnk)%q_adv(j,:,:,:) = (phys_state(lchnk)%q(:,:,:) - phys_state_mmf(lchnk)%q(:,:,:))/1200.
          end if
       end do
    end do
 
-   ! sync phys_state_sp with phys_state for state variables except for adv/phy tendencies, so that we can output the correct phys_state_sp for training
+   ! sync phys_state_mmf with phys_state for state variables except for adv/phy tendencies, so that we can output the correct phys_state_mmf for training
    do lchnk=begchunk,endchunk
-      phys_state_sp_backup(lchnk) = phys_state_sp(lchnk)
-      call physics_state_dealloc(phys_state_sp(lchnk))
-      call physics_state_copy(phys_state(lchnk), phys_state_sp(lchnk))
-      phys_state_sp(lchnk)%t_adv(:,:,:) = phys_state_sp_backup(lchnk)%t_adv(:,:,:)
-      phys_state_sp(lchnk)%u_adv(:,:,:) = phys_state_sp_backup(lchnk)%u_adv(:,:,:)
-      phys_state_sp(lchnk)%t_phy(:,:,:) = phys_state_sp_backup(lchnk)%t_phy(:,:,:)
-      phys_state_sp(lchnk)%u_phy(:,:,:) = phys_state_sp_backup(lchnk)%u_phy(:,:,:)
-      phys_state_sp(lchnk)%q_adv(:,:,:,:) = phys_state_sp_backup(lchnk)%q_adv(:,:,:,:)
-      phys_state_sp(lchnk)%q_phy(:,:,:,:) = phys_state_sp_backup(lchnk)%q_phy(:,:,:,:)
+      phys_state_mmf_backup(lchnk) = phys_state_mmf(lchnk)
+      call physics_state_dealloc(phys_state_mmf(lchnk))
+      call physics_state_copy(phys_state(lchnk), phys_state_mmf(lchnk))
+      phys_state_mmf(lchnk)%t_adv(:,:,:) = phys_state_mmf_backup(lchnk)%t_adv(:,:,:)
+      phys_state_mmf(lchnk)%u_adv(:,:,:) = phys_state_mmf_backup(lchnk)%u_adv(:,:,:)
+      phys_state_mmf(lchnk)%t_phy(:,:,:) = phys_state_mmf_backup(lchnk)%t_phy(:,:,:)
+      phys_state_mmf(lchnk)%u_phy(:,:,:) = phys_state_mmf_backup(lchnk)%u_phy(:,:,:)
+      phys_state_mmf(lchnk)%q_adv(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_adv(:,:,:,:)
+      phys_state_mmf(lchnk)%q_phy(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_phy(:,:,:,:)
    end do
-#endif   /* endif CLIMSIM for updating sp state*/
+#endif   /* endif CLIMSIM for updating mmf state*/
 
 #ifdef MMF_ML_TRAINING
    if (present(yr).and.present(mn).and.present(dy).and.present(sec)) then
       call write_ml_training(pbuf2d, phys_state, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 1) ! this will be saved in 'mli' file
 #ifdef CLIMSIM
-      call write_ml_training(pbuf2d, phys_state_sp, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 3) ! this will be saved in 'mlis' file
+      call write_ml_training(pbuf2d, phys_state_mmf, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 3) ! this will be saved in 'mlis' file
 #endif /* CLIMSIM */
    end if
 #endif /* MMF_ML_TRAINING */
@@ -398,7 +398,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
 
 
 #ifdef CLIMSIM
-   call climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, dtime, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_sp)
+   call climsim_driver(phys_state, phys_state_aphys1, phys_state_mmf, dtime, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_mmf)
 #else
    call phys_run1(phys_state, dtime, phys_tend, pbuf2d,  cam_in, cam_out)
 #endif 
@@ -437,22 +437,22 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    end do
 
 #ifdef CLIMSIM
-   !update phy tendencies for phys_state_sp
+   !update phy tendencies for phys_state_mmf
    do lchnk=begchunk,endchunk
       do i=1,ptracker
          j = 1+ptracker-i
          if (j>1) then
-            phys_state_sp(lchnk)%t_phy(j,:,:) = phys_state_sp(lchnk)%t_phy(j-1,:,:)
-            phys_state_sp(lchnk)%u_phy(j,:,:) = phys_state_sp(lchnk)%u_phy(j-1,:,:)
-            phys_state_sp(lchnk)%q_phy(j,:,:,:) = phys_state_sp(lchnk)%q_phy(j-1,:,:,:)
+            phys_state_mmf(lchnk)%t_phy(j,:,:) = phys_state_mmf(lchnk)%t_phy(j-1,:,:)
+            phys_state_mmf(lchnk)%u_phy(j,:,:) = phys_state_mmf(lchnk)%u_phy(j-1,:,:)
+            phys_state_mmf(lchnk)%q_phy(j,:,:,:) = phys_state_mmf(lchnk)%q_phy(j-1,:,:,:)
          else
-            phys_state_sp(lchnk)%t_phy(j,:,:) = (phys_state_sp(lchnk)%t(:,:) - phys_state_tmp(lchnk)%t(:,:))/1200.
-            phys_state_sp(lchnk)%u_phy(j,:,:) = (phys_state_sp(lchnk)%u(:,:) - phys_state_tmp(lchnk)%u(:,:))/1200.
-            phys_state_sp(lchnk)%q_phy(j,:,:,:) = (phys_state_sp(lchnk)%q(:,:,:) - phys_state_tmp(lchnk)%q(:,:,:))/1200.
+            phys_state_mmf(lchnk)%t_phy(j,:,:) = (phys_state_mmf(lchnk)%t(:,:) - phys_state_tmp(lchnk)%t(:,:))/1200.
+            phys_state_mmf(lchnk)%u_phy(j,:,:) = (phys_state_mmf(lchnk)%u(:,:) - phys_state_tmp(lchnk)%u(:,:))/1200.
+            phys_state_mmf(lchnk)%q_phy(j,:,:,:) = (phys_state_mmf(lchnk)%q(:,:,:) - phys_state_tmp(lchnk)%q(:,:,:))/1200.
          end if
       end do
    end do
-#endif /* endif CLIMSIM for updating phys tendencies in sp state*/
+#endif /* endif CLIMSIM for updating phys tendencies in mmf state*/
 
 #endif /* endif MMF_ML_TRAINING || CLIMSIM */
 
@@ -465,7 +465,7 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
    if (present(yr).and.present(mn).and.present(dy).and.present(sec)) then
       call write_ml_training(pbuf2d, phys_state, phys_tend, cam_in, cam_out, yr, mn, dy, sec, 2) ! this will be saved in 'mlo' file
 #ifdef CLIMSIM
-      call write_ml_training(pbuf2d, phys_state_sp, phys_tend, cam_in, cam_out_sp, yr, mn, dy, sec, 4) ! this will be saved in 'mlos' file
+      call write_ml_training(pbuf2d, phys_state_mmf, phys_tend, cam_in, cam_out_mmf, yr, mn, dy, sec, 4) ! this will be saved in 'mlos' file
 #endif /* CLIMSIM */
    end if
 #endif /* MMF_ML_TRAINING */
@@ -473,10 +473,10 @@ subroutine cam_run1(cam_in, cam_out, yr, mn, dy, sec )
 #if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
    do lchnk=begchunk,endchunk
       call physics_state_dealloc(phys_state_tmp(lchnk))
-      call physics_state_dealloc(phys_state_sp_backup(lchnk))
+      call physics_state_dealloc(phys_state_mmf_backup(lchnk))
    end do
    deallocate(phys_state_tmp)
-   deallocate(phys_state_sp_backup)
+   deallocate(phys_state_mmf_backup)
 #endif
 
 end subroutine cam_run1
@@ -702,14 +702,14 @@ subroutine cam_final( cam_out, cam_in )
 #if defined(MMF_ML_TRAINING) || defined(CLIMSIM)
    do lchnk=begchunk,endchunk
       call physics_state_dealloc(phys_state_aphys1(lchnk))
-      call physics_state_dealloc(phys_state_sp(lchnk))
+      call physics_state_dealloc(phys_state_mmf(lchnk))
       call physics_tend_dealloc(phys_tend_placeholder(lchnk))
-      call physics_tend_dealloc(phys_tend_placeholder_sp(lchnk))
+      call physics_tend_dealloc(physphys_tend_placeholder_mmf(lchnk))
    end do
    deallocate(phys_state_aphys1)
    deallocate(phys_tend_placeholder)
-   deallocate(phys_state_sp)
-   deallocate(phys_tend_placeholder_sp)
+   deallocate(phys_state_mmf)
+   deallocate(physphys_tend_placeholder_mmf)
 #endif
 
 #else

@@ -713,12 +713,12 @@ end subroutine phys_init
 !===================================================================================================
 
 #ifdef CLIMSIM
-subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_sp)
+subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_mmf, ztodt, phys_tend, pbuf2d,  cam_in, cam_out, cam_out_mmf)
   !-----------------------------------------------------------------------------
   ! Purpose: climsim driver
   !-----------------------------------------------------------------------------
   use climsim,          only: cb_partial_coupling, cb_partial_coupling_vars, cb_spinup_step, cb_do_ramp, cb_ramp_linear_steps, &
-                              cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, cb_solin_nolag
+                              cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps
   use physics_buffer,   only: physics_buffer_desc, pbuf_get_chunk, &
                               pbuf_allocate, pbuf_get_index, pbuf_get_field
   use time_manager,     only: get_nstep, get_step_size, & 
@@ -749,12 +749,12 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
   real(r8), intent(in) :: ztodt            ! physics time step unless nstep=0
   type(physics_state), intent(inout), dimension(begchunk:endchunk) :: phys_state
   type(physics_state), intent(in),    dimension(begchunk:endchunk) :: phys_state_aphys1
-  type(physics_state), intent(inout),    dimension(begchunk:endchunk) :: phys_state_sp
+  type(physics_state), intent(inout),    dimension(begchunk:endchunk) :: phys_state_mmf
   type(physics_tend ), intent(inout), dimension(begchunk:endchunk) :: phys_tend
   type(physics_buffer_desc), pointer, dimension(:,:)               :: pbuf2d
   type(cam_in_t),                     dimension(begchunk:endchunk) :: cam_in
   type(cam_out_t),                    dimension(begchunk:endchunk) :: cam_out
-  type(cam_out_t),      intent(out),      dimension(begchunk:endchunk) :: cam_out_sp
+  type(cam_out_t),      intent(out),      dimension(begchunk:endchunk) :: cam_out_mmf
 
   !-----------------------------------------------------------------------------
   ! Local Variables
@@ -783,11 +783,11 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
 
   ! - for partial coupling - !
 ! type(physics_state), dimension(begchunk:endchunk)  :: phys_state_nn
-  ! type(physics_state), dimension(begchunk:endchunk)  :: phys_state_sp_backup
+  ! type(physics_state), dimension(begchunk:endchunk)  :: phys_state_mmf_backup
   ! type(physics_tend ), dimension(begchunk:endchunk)  :: phys_tend_nn
 
   type(physics_state), allocatable, dimension(:)  :: phys_state_nn
-  type(physics_state), allocatable, dimension(:)  :: phys_state_sp_backup
+  type(physics_state), allocatable, dimension(:)  :: phys_state_mmf_backup
   type(physics_tend ), allocatable, dimension(:)  :: phys_tend_nn
   type(cam_out_t),     dimension(begchunk:endchunk)  :: cam_out_nn
   integer :: ixcldice, ixcldliq
@@ -825,10 +825,10 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
       write(iulog,*) 'Error allocating phys_state_nn error = ',ierr
    end if
 
-   allocate(phys_state_sp_backup(begchunk:endchunk), stat=ierr)
+   allocate(phys_state_mmf_backup(begchunk:endchunk), stat=ierr)
    if (ierr /= 0) then
       ! Handle allocation error
-      write(iulog,*) 'Error allocating phys_state_sp_backup error = ',ierr
+      write(iulog,*) 'Error allocating phys_state_mmf_backup error = ',ierr
    end if
 
    allocate(phys_tend_nn(begchunk:endchunk), stat=ierr)
@@ -839,7 +839,7 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
 
     do lchnk=begchunk,endchunk
       call physics_state_alloc(phys_state_nn(lchnk),lchnk,pcols)
-      call physics_state_alloc(phys_state_sp_backup(lchnk),lchnk,pcols)
+      call physics_state_alloc(phys_state_mmf_backup(lchnk),lchnk,pcols)
       ! call physics_tend_alloc(phys_tend_nn(lchnk),lchnk,pcols)
    end do
 
@@ -863,11 +863,7 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
   call get_variability(sfac)                        ! "
   do lchnk=begchunk,endchunk
      ncol = phys_state(lchnk)%ncol
-     if (cb_solin_nolag) then
-      calday = get_curr_calday()
-     else
-      calday = get_curr_calday(-dtime) ! get current calendar day with a negative offset to match the time in mli
-     end if
+     calday = get_curr_calday(-dtime) ! get current calendar day with a negative offset to match the time in mli and CRM physics
      ! coszrs
      call get_rlat_all_p(lchnk, ncol, clat)
      call get_rlon_all_p(lchnk, ncol, clon)
@@ -921,9 +917,9 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
   !Save original values of subroutine arguments
   if (do_climsim_inference .and. cb_partial_coupling) then
      do lchnk = begchunk, endchunk
-      ! since phys_state_sp_backup etc is just allocated but have not been initialized (empty), doing this copy won't lead to memory leak
+      ! since phys_state_mmf_backup etc is just allocated but have not been initialized (empty), doing this copy won't lead to memory leak
         phys_state_nn(lchnk) = phys_state(lchnk) 
-        phys_state_sp_backup(lchnk) = phys_state_sp(lchnk)
+        phys_state_mmf_backup(lchnk) = phys_state_mmf(lchnk)
         phys_tend_nn(lchnk)  = phys_tend(lchnk) 
         cam_out_nn(lchnk)    = cam_out(lchnk) 
      end do
@@ -933,9 +929,9 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
   if (.not. do_climsim_inference) then  ! MMFspin-up
      call phys_run1(phys_state, ztodt, phys_tend, pbuf2d,  cam_in, cam_out)
      do lchnk = begchunk, endchunk
-        call physics_state_dealloc(phys_state_sp(lchnk)) ! to prevent memory leak
-        call physics_state_copy(phys_state(lchnk), phys_state_sp(lchnk))
-        cam_out_sp(lchnk)    = cam_out(lchnk)
+        call physics_state_dealloc(phys_state_mmf(lchnk)) ! to prevent memory leak
+        call physics_state_copy(phys_state(lchnk), phys_state_mmf(lchnk))
+        cam_out_mmf(lchnk)    = cam_out(lchnk)
      end do
 
   else  ! NN inference
@@ -952,16 +948,16 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
         end do
 
         do lchnk = begchunk, endchunk
-          ! update phys_state_sp but cannot overwrite its the mmf adv and phy history
-          call physics_state_dealloc(phys_state_sp(lchnk))
-          call physics_state_copy(phys_state(lchnk), phys_state_sp(lchnk))
-          phys_state_sp(lchnk)%t_adv(:,:,:) = phys_state_sp_backup(lchnk)%t_adv(:,:,:)
-          phys_state_sp(lchnk)%u_adv(:,:,:) = phys_state_sp_backup(lchnk)%u_adv(:,:,:)
-          phys_state_sp(lchnk)%t_phy(:,:,:) = phys_state_sp_backup(lchnk)%t_phy(:,:,:)
-          phys_state_sp(lchnk)%u_phy(:,:,:) = phys_state_sp_backup(lchnk)%u_phy(:,:,:)
-          phys_state_sp(lchnk)%q_adv(:,:,:,:) = phys_state_sp_backup(lchnk)%q_adv(:,:,:,:)
-          phys_state_sp(lchnk)%q_phy(:,:,:,:) = phys_state_sp_backup(lchnk)%q_phy(:,:,:,:)
-          cam_out_sp(lchnk) = cam_out(lchnk)
+          ! update phys_state_mmf but cannot overwrite its the mmf adv and phy history
+          call physics_state_dealloc(phys_state_mmf(lchnk))
+          call physics_state_copy(phys_state(lchnk), phys_state_mmf(lchnk))
+          phys_state_mmf(lchnk)%t_adv(:,:,:) = phys_state_mmf_backup(lchnk)%t_adv(:,:,:)
+          phys_state_mmf(lchnk)%u_adv(:,:,:) = phys_state_mmf_backup(lchnk)%u_adv(:,:,:)
+          phys_state_mmf(lchnk)%t_phy(:,:,:) = phys_state_mmf_backup(lchnk)%t_phy(:,:,:)
+          phys_state_mmf(lchnk)%u_phy(:,:,:) = phys_state_mmf_backup(lchnk)%u_phy(:,:,:)
+          phys_state_mmf(lchnk)%q_adv(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_adv(:,:,:,:)
+          phys_state_mmf(lchnk)%q_phy(:,:,:,:) = phys_state_mmf_backup(lchnk)%q_phy(:,:,:,:)
+          cam_out_mmf(lchnk) = cam_out(lchnk)
         end do
 
         call phys_run1_NN(phys_state_nn, phys_state_aphys1, ztodt, phys_tend_nn, pbuf2d, cam_in, cam_out_nn,&
@@ -981,10 +977,10 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
         call phys_run1_NN(phys_state, phys_state_aphys1, ztodt, phys_tend, pbuf2d,  cam_in, cam_out,&
                           solin, coszrs)
         do lchnk = begchunk, endchunk
-          ! in fully nn coupling case (no partial coupling), phys_state_sp is just synced with phys_state but won't be used
-          call physics_state_dealloc(phys_state_sp(lchnk))
-          call physics_state_copy(phys_state(lchnk), phys_state_sp(lchnk))
-          cam_out_sp(lchnk)    = cam_out(lchnk)
+          ! in fully nn coupling case (no partial coupling), phys_state_mmf is just synced with phys_state but won't be used
+          call physics_state_dealloc(phys_state_mmf(lchnk))
+          call physics_state_copy(phys_state(lchnk), phys_state_mmf(lchnk))
+          cam_out_mmf(lchnk)    = cam_out(lchnk)
         end do
      end if ! (cb_partial_coupling)
   end if ! (.not. do_climsim_inference)
@@ -1171,11 +1167,11 @@ subroutine climsim_driver(phys_state, phys_state_aphys1, phys_state_sp, ztodt, p
 
   do lchnk=begchunk,endchunk
     call physics_state_dealloc(phys_state_nn(lchnk))
-    call physics_state_dealloc(phys_state_sp_backup(lchnk))
+    call physics_state_dealloc(phys_state_mmf_backup(lchnk))
     call physics_tend_dealloc(phys_tend_nn(lchnk))
   end do
   deallocate(phys_state_nn)
-  deallocate(phys_state_sp_backup)
+  deallocate(phys_state_mmf_backup)
   deallocate(phys_tend_nn)
 
 end subroutine climsim_driver
