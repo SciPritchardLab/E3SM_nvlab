@@ -15,7 +15,7 @@ acct = 'm4331'
 # case_prefix = 'dagger2_exp1_iter1_alphap5_test'
 # case_prefix = 'corrected_nndebug_prune_clip_seed'
 case_prefix = 'v2_noclassifier_huber_1y_noaggressive_minimum_rop'
-exe_refcase = 'v5_noclassifier_huber_1y_noaggressive_minimum_rop2'
+exe_refcase = 'v5_noclassifier_huber_1y_noaggressive_minimum_rop2_quick'
 # Added extra physics_state and cam_out variables.
 
 top_dir  = os.getenv('HOME')
@@ -74,7 +74,7 @@ case='.'.join(case_list)
 f_torch_model = '/global/homes/z/zeyuanhu/scratch/hugging/E3SM-MMF_ne4/saved_models_wrapper/v2rh_mlp_nonaggressive_cliprh_huber_rop_3l_lr1em3_r2.pt'
 
 cb_spinup_step = 5
-f_cb_strato_water_constraint = '.true.'
+f_cb_strato_water_constraint = '.false.'
 
 f_cb_do_ramp = '.false.'
 f_cb_ramp_option = 'step'
