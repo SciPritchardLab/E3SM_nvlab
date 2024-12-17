@@ -20,6 +20,7 @@ endif()
 # samxx needs to link with the yakl library
 # also add pytorch-fortran libs
 # target_link_libraries(samxx yakl pytorch_fort_proxy pytorch_proxy)
+target_link_libraries(samxx yakl)
 target_compile_features(samxx PUBLIC cxx_std_14)
 
 # Set fortran compiler flags
