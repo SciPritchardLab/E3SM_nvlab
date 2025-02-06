@@ -376,7 +376,6 @@
       <modules compiler="nvidia.*">
         <command name="load">PrgEnv-nvidia</command>
         <command name="load">nvidia/22.7</command>
-        <command name="load">pytorch/2.0.1</command>
       </modules>
 
       <modules compiler="gnugpu">
