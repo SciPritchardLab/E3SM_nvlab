@@ -140,7 +140,6 @@ contains
    ! MPI configuration
   integer :: rank, ierr
 
-  call mpi_init(ierr)
   call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
    math_pi = 3.14159265358979323846_r8
@@ -481,7 +480,6 @@ end subroutine neural_net
        ! MPI configuration
     integer :: rank, ierr
 
-    call mpi_init(ierr)
     call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
     ! allocate(torch_mod (1))
