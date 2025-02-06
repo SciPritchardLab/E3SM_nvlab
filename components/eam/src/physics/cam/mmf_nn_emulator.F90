@@ -23,6 +23,8 @@ use phys_grid,       only: get_lat_p, get_lon_p, get_rlat_p, get_rlon_p
 
 use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_delete, &
                       torch_tensor_from_array, torch_model_load, torch_model_forward
+
+use, intrinsic :: iso_fortran_env, only : sp => real32
 !--------------------------------------
 
   implicit none
@@ -64,6 +66,8 @@ use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_delete, &
   ! local
   logical :: cb_top_levels_zero_out = .true.
   integer :: cb_n_levels_zero = 12 ! top n levels to zero out
+
+  integer, parameter :: wp = sp
 
 #ifdef MMF_NN_EMULATOR
   public neural_net, init_neural_net, mmf_nn_emulator_readnl, &
@@ -120,8 +124,8 @@ contains
 
   !  real(wp), dimension(:,:), allocatable, target :: input_torch
   !  real(wp), dimension(:,:), allocatable, target :: output_torch
-   real(real32), target :: in_data(pcols, inputlength)
-   real(real32), target :: out_data(pcols, outputlength)
+   real(wp), target :: in_data(pcols, inputlength)
+   real(wp), target :: out_data(pcols, outputlength)
    integer, parameter :: in_dims = 2
    integer, parameter :: in_shape(in_dims) = [pcols, inputlength]
    integer, parameter :: in_layout(in_dims) = [1, 2]
