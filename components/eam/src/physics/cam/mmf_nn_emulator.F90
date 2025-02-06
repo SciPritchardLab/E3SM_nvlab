@@ -70,11 +70,6 @@ use mpi, only : mpi_init, mpi_finalize, mpi_comm_world, mpi_comm_rank
 
   integer, parameter :: wp = sp
 
-  ! MPI configuration
-  integer :: rank, ierr, i
-
-  call mpi_init(ierr)
-  call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
 #ifdef MMF_NN_EMULATOR
   public neural_net, init_neural_net, mmf_nn_emulator_readnl, &
@@ -141,6 +136,12 @@ contains
    integer, parameter :: out_layout(2) = [1, 2]
 
    real(r8) :: math_pi
+
+   ! MPI configuration
+  integer :: rank, ierr
+
+  call mpi_init(ierr)
+  call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
    math_pi = 3.14159265358979323846_r8
    in_shape = [pcols, inputlength]
@@ -476,6 +477,12 @@ end subroutine neural_net
     implicit none
 
     integer :: i, k
+
+       ! MPI configuration
+    integer :: rank, ierr
+
+    call mpi_init(ierr)
+    call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
     ! allocate(torch_mod (1))
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
