@@ -25,6 +25,7 @@ use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_kCUDA, torch_del
                       torch_tensor_from_array, torch_model_load, torch_model_forward
 
 use, intrinsic :: iso_fortran_env, only : sp => real32
+use mpi, only : mpi_init, mpi_finalize, mpi_comm_world, mpi_comm_rank
 !--------------------------------------
 
   implicit none
@@ -68,6 +69,12 @@ use, intrinsic :: iso_fortran_env, only : sp => real32
   integer :: cb_n_levels_zero = 12 ! top n levels to zero out
 
   integer, parameter :: wp = sp
+
+  ! MPI configuration
+  integer :: rank, ierr, i
+
+  call mpi_init(ierr)
+  call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
 #ifdef MMF_NN_EMULATOR
   public neural_net, init_neural_net, mmf_nn_emulator_readnl, &
@@ -319,8 +326,8 @@ end select
         in_data(i,k) = input(i,k)
       end do
     end do
-    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
-    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCUDA)
+    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA, device_index=rank)
+    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
     call torch_model_forward(model, in_tensors, out_tensors)
     do i=1, ncol
       do k=1,outputlength
@@ -474,7 +481,7 @@ end subroutine neural_net
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
 
-    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
+    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA, device_index=rank)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
