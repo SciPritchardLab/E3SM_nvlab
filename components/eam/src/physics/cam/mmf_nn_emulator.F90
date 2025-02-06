@@ -21,7 +21,7 @@ use phys_grid,       only: get_lat_p, get_lon_p, get_rlat_p, get_rlon_p
 ! use torch_ftn
 ! use iso_fortran_env
 
-use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_delete, &
+use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_kCUDA, torch_delete, &
                       torch_tensor_from_array, torch_model_load, torch_model_forward
 
 use, intrinsic :: iso_fortran_env, only : sp => real32
@@ -319,8 +319,8 @@ end select
         in_data(i,k) = input(i,k)
       end do
     end do
-    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCPU)
-    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
+    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCUDA)
     call torch_model_forward(model, in_tensors, out_tensors)
     do i=1, ncol
       do k=1,outputlength
@@ -474,7 +474,7 @@ end subroutine neural_net
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
 
-    call torch_model_load(model, trim(cb_torch_model), torch_kCPU)
+    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
