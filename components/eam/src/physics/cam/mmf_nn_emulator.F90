@@ -127,15 +127,17 @@ contains
    real(wp), target :: in_data(pcols, inputlength)
    real(wp), target :: out_data(pcols, outputlength)
    integer, parameter :: in_dims = 2
-   integer, parameter :: in_shape(in_dims) = [pcols, inputlength]
-   integer, parameter :: in_layout(in_dims) = [1, 2]
+   integer :: in_shape(2)
+   integer, parameter :: in_layout(2) = [1, 2]
    integer, parameter :: out_dims = 2
-   integer, parameter :: out_shape(out_dims) = [pcols, outputlength]
-   integer, parameter :: out_layout(out_dims) = [1, 2]
+   integer :: out_shape(2)
+   integer, parameter :: out_layout(2) = [1, 2]
 
    real(r8) :: math_pi
 
    math_pi = 3.14159265358979323846_r8
+   in_shape = [pcols, inputlength]
+   out_shape = [pcols, outputlength]
 
    ncol  = state%ncol
    call cnst_get_ind('CLDLIQ', ixcldliq)
@@ -322,7 +324,7 @@ end select
     call torch_model_forward(model, in_tensors, out_tensors)
     do i=1, ncol
       do k=1,outputlength
-        output(i,k) = output_torch(i,k)
+        output(i,k) = out_data(i,k)
       end do
     end do
 
@@ -472,7 +474,7 @@ end subroutine neural_net
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
 
-    torch_model_load(model, trim(cb_torch_model), torch_kCPU)
+    call torch_model_load(model, trim(cb_torch_model), torch_kCPU)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
