@@ -18,8 +18,11 @@ use phys_grid,       only: get_lat_p, get_lon_p, get_rlat_p, get_rlon_p
 
 !-------- torch fortran --------
 
-use torch_ftn
-use iso_fortran_env
+! use torch_ftn
+! use iso_fortran_env
+
+use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_delete, &
+                      torch_tensor_from_array, torch_model_load, torch_model_forward
 !--------------------------------------
 
   implicit none
@@ -56,7 +59,7 @@ use iso_fortran_env
   logical :: cb_strato_water_constraint = .false. ! zero out cloud (qc and qi) above tropopause in the NN output
   real(r8) :: dtheta_thred = 10.0 ! threshold for determine the tropopause (currently is p<400hPa and dtheta/dz>dtheta_thred = 10K/km) 
 
-  type(torch_module), allocatable :: torch_mod(:)
+  type(torch_model) :: model
 
   ! local
   logical :: cb_top_levels_zero_out = .true.
@@ -107,10 +110,25 @@ contains
    real(r8), pointer, dimension(:,:) :: ozone, ch4, n2o ! (/pcols,pver/)
 
   !  type(torch_module) :: torch_mod
-   type(torch_tensor_wrap) :: input_tensors
-   type(torch_tensor) :: out_tensor
-   real(real32) :: input_torch(inputlength, pcols)
-   real(real32), pointer :: output_torch(:, :)
+  !  type(torch_tensor_wrap) :: input_tensors
+  !  type(torch_tensor) :: out_tensor
+  !  real(real32) :: input_torch(inputlength, pcols)
+  !  real(real32), pointer :: output_torch(:, :)
+
+   type(torch_tensor), dimension(1) :: in_tensors
+   type(torch_tensor), dimension(1) :: out_tensors
+
+  !  real(wp), dimension(:,:), allocatable, target :: input_torch
+  !  real(wp), dimension(:,:), allocatable, target :: output_torch
+   real(real32), target :: in_data(pcols, inputlength)
+   real(real32), target :: out_data(pcols, outputlength)
+   integer, parameter :: in_dims = 2
+   integer, parameter :: in_shape(in_dims) = [pcols, inputlength]
+   integer, parameter :: in_layout(in_dims) = [1, 2]
+   integer, parameter :: out_dims = 2
+   integer, parameter :: out_shape(out_dims) = [pcols, outputlength]
+   integer, parameter :: out_layout(out_dims) = [1, 2]
+
    real(r8) :: math_pi
 
    math_pi = 3.14159265358979323846_r8
@@ -270,24 +288,39 @@ end select
 
 
     ! do the torch inference    
-    input_torch(:,:) = 0.
+    ! input_torch(:,:) = 0.
+    ! do i=1,ncol
+    !   do k=1,inputlength
+    !     input_torch(k,i) = input(i,k)
+    !   end do
+    ! end do
+    ! !print *, "Creating input tensor"
+    ! call input_tensors%create
+    ! !print *, "Adding input data"
+    ! call input_tensors%add_array(input_torch)
+    ! call torch_mod(1)%forward(input_tensors, out_tensor, flags=module_use_inference_mode)
+    ! call out_tensor%to_array(output_torch)
+    ! do i=1, ncol
+    !   do k=1,outputlength
+    !     output(i,k) = output_torch(k,i)
+    !   end do
+    ! end do
+
+    ! inference with ftorch
+    in_data(:,:) = 0.
     do i=1,ncol
       do k=1,inputlength
-        input_torch(k,i) = input(i,k)
+        in_data(i,k) = input(i,k)
       end do
     end do
-    !print *, "Creating input tensor"
-    call input_tensors%create
-    !print *, "Adding input data"
-    call input_tensors%add_array(input_torch)
-    call torch_mod(1)%forward(input_tensors, out_tensor, flags=module_use_inference_mode)
-    call out_tensor%to_array(output_torch)
+    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCPU)
+    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
+    call torch_model_forward(model, in_tensors, out_tensors)
     do i=1, ncol
       do k=1,outputlength
-        output(i,k) = output_torch(k,i)
+        output(i,k) = output_torch(i,k)
       end do
     end do
-
 
     !!! do post processing some non-negative constraints + option to do stratosphere water denial
 
@@ -431,9 +464,11 @@ end subroutine neural_net
 
     integer :: i, k
 
-    allocate(torch_mod (1))
-    call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
+    ! allocate(torch_mod (1))
+    ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
+
+    torch_model_load(model, trim(cb_torch_model), torch_kCPU)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
