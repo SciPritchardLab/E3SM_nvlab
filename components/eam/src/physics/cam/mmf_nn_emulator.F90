@@ -326,7 +326,8 @@ end select
         in_data(i,k) = input(i,k)
       end do
     end do
-    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA, device_index=rank)
+    ! call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA, device_index=rank)
+    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
     call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
     call torch_model_forward(model, in_tensors, out_tensors)
     do i=1, ncol
@@ -486,7 +487,8 @@ end subroutine neural_net
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
 
-    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA, device_index=rank)
+    ! call torch_model_load(model, trim(cb_torch_model), torch_kCUDA, device_index=rank)
+    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
