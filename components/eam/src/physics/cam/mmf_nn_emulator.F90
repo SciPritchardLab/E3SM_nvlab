@@ -44,6 +44,7 @@ use, intrinsic :: iso_fortran_env, only : sp => real32
   character(len=fieldname_lenp2) :: cb_partial_coupling_vars(pflds)
   character(len=256) :: cb_nn_var_combo = 'v4' ! nickname for a specific NN in/out variable combination, currently support v2 or v4
   character(len=256)    :: cb_torch_model   ! absolute filepath for a torchscript model txt file
+  logical :: cb_use_cuda = .true. ! use CUDA for ftorch inference
 
   ! option to mix the NN output with an SP prediction with customized partition scheduling
   !tendency sent to GCM grid would be: ratio * NN output + (1-ratio) * SP output
@@ -323,7 +324,12 @@ end select
     end do
 
     call t_startf ('nn_inference')
-    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    if (cb_use_cuda) then
+      call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    else
+      call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCPU)
+    end if
+    !call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
     !call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
     call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
     call torch_model_forward(model, in_tensors, out_tensors)
@@ -480,8 +486,12 @@ end subroutine neural_net
     ! allocate(torch_mod (1))
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
-
-    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
+    if (cb_use_cuda) then
+      call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
+    else
+      call torch_model_load(model, trim(cb_torch_model), torch_kCPU)
+    end if
+    ! call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     !call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     
   ! add diagnostic output fileds
@@ -593,7 +603,7 @@ end subroutine neural_net
                            cb_partial_coupling, cb_partial_coupling_vars,&
                            cb_use_input_prectm1, &
                            cb_nn_var_combo, &
-                           cb_torch_model, cb_spinup_step, &
+                           cb_torch_model, cb_use_cuda, cb_spinup_step, &
                            cb_do_ramp, cb_ramp_linear_steps, &
                            cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, &
                            cb_strato_water_constraint, dtheta_thred
@@ -637,6 +647,7 @@ end subroutine neural_net
       call mpibcast(cb_ramp_step_1steps, 1,            mpiint,  0, mpicom)
       call mpibcast(cb_strato_water_constraint,   1, mpilog,  0, mpicom)
       call mpibcast(dtheta_thred, 1,            mpir8,  0, mpicom)
+      call mpibcast(cb_use_cuda, 1,                  mpilog,  0, mpicom)
 
 
       ! [TODO] check ierr for each mpibcast call
