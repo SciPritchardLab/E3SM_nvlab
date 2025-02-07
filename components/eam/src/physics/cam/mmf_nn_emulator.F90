@@ -15,6 +15,7 @@ use cam_history_support, only: pflds, fieldname_lenp2
 use cam_abortutils,  only: endrun
 use string_utils,    only: to_lower
 use phys_grid,       only: get_lat_p, get_lon_p, get_rlat_p, get_rlon_p
+use perf_mod
 
 !-------- torch fortran --------
 
@@ -25,7 +26,6 @@ use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_kCUDA, torch_del
                       torch_tensor_from_array, torch_model_load, torch_model_forward
 
 use, intrinsic :: iso_fortran_env, only : sp => real32
-use mpi, only : mpi_init, mpi_finalize, mpi_comm_world, mpi_comm_rank
 !--------------------------------------
 
   implicit none
@@ -136,11 +136,6 @@ contains
    integer, parameter :: out_layout(2) = [1, 2]
 
    real(r8) :: math_pi
-
-   ! MPI configuration
-  integer :: rank, ierr
-
-  call mpi_comm_rank(mpi_comm_world, rank, ierr)
 
    math_pi = 3.14159265358979323846_r8
    in_shape = [pcols, inputlength]
@@ -326,10 +321,14 @@ end select
         in_data(i,k) = input(i,k)
       end do
     end do
-    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA, device_index=rank)
+
+    call t_startf ('nn_inference')
+    call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
     !call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
     call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
     call torch_model_forward(model, in_tensors, out_tensors)
+    call t_stopf ('nn_inference')
+
     do i=1, ncol
       do k=1,outputlength
         output(i,k) = out_data(i,k)
@@ -478,21 +477,11 @@ end subroutine neural_net
 
     integer :: i, k
 
-       ! MPI configuration
-    integer :: rank, ierr
-    CHARACTER(len=100) :: command
-
-    call mpi_comm_rank(mpi_comm_world, rank, ierr)
-
-    ! Set CUDA_VISIBLE_DEVICES based on MPI rank
-    WRITE(command, '(A,I1)') "export CUDA_VISIBLE_DEVICES=", rank
-    CALL SYSTEM(command)
-
     ! allocate(torch_mod (1))
     ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
 
-    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA, device_index=rank)
+    call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     !call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     
   ! add diagnostic output fileds
