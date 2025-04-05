@@ -15,11 +15,17 @@ use cam_history_support, only: pflds, fieldname_lenp2
 use cam_abortutils,  only: endrun
 use string_utils,    only: to_lower
 use phys_grid,       only: get_lat_p, get_lon_p, get_rlat_p, get_rlon_p
+use perf_mod
 
 !-------- torch fortran --------
 
-use torch_ftn
-use iso_fortran_env
+! use torch_ftn
+! use iso_fortran_env
+
+use ftorch, only : torch_model, torch_tensor, torch_kCPU, torch_kCUDA, torch_delete, &
+                      torch_tensor_from_array, torch_model_load, torch_model_forward
+
+use, intrinsic :: iso_fortran_env, only : sp => real32
 !--------------------------------------
 
   implicit none
@@ -38,6 +44,7 @@ use iso_fortran_env
   character(len=fieldname_lenp2) :: cb_partial_coupling_vars(pflds)
   character(len=256) :: cb_nn_var_combo = 'v4' ! nickname for a specific NN in/out variable combination, currently support v2 or v4
   character(len=256)    :: cb_torch_model   ! absolute filepath for a torchscript model txt file
+  logical :: cb_use_cuda = .true. ! use CUDA for ftorch inference
 
   ! option to mix the NN output with an SP prediction with customized partition scheduling
   !tendency sent to GCM grid would be: ratio * NN output + (1-ratio) * SP output
@@ -56,11 +63,14 @@ use iso_fortran_env
   logical :: cb_strato_water_constraint = .false. ! zero out cloud (qc and qi) above tropopause in the NN output
   real(r8) :: dtheta_thred = 10.0 ! threshold for determine the tropopause (currently is p<400hPa and dtheta/dz>dtheta_thred = 10K/km) 
 
-  type(torch_module), allocatable :: torch_mod(:)
+  type(torch_model) :: model
 
   ! local
   logical :: cb_top_levels_zero_out = .true.
   integer :: cb_n_levels_zero = 12 ! top n levels to zero out
+
+  integer, parameter :: wp = sp
+
 
 #ifdef MMF_NN_EMULATOR
   public neural_net, init_neural_net, mmf_nn_emulator_readnl, &
@@ -107,13 +117,30 @@ contains
    real(r8), pointer, dimension(:,:) :: ozone, ch4, n2o ! (/pcols,pver/)
 
   !  type(torch_module) :: torch_mod
-   type(torch_tensor_wrap) :: input_tensors
-   type(torch_tensor) :: out_tensor
-   real(real32) :: input_torch(inputlength, pcols)
-   real(real32), pointer :: output_torch(:, :)
+  !  type(torch_tensor_wrap) :: input_tensors
+  !  type(torch_tensor) :: out_tensor
+  !  real(real32) :: input_torch(inputlength, pcols)
+  !  real(real32), pointer :: output_torch(:, :)
+
+   type(torch_tensor), dimension(1) :: in_tensors
+   type(torch_tensor), dimension(1) :: out_tensors
+
+  !  real(wp), dimension(:,:), allocatable, target :: input_torch
+  !  real(wp), dimension(:,:), allocatable, target :: output_torch
+   real(wp), target :: in_data(pcols, inputlength)
+   real(wp), target :: out_data(pcols, outputlength)
+   integer, parameter :: in_dims = 2
+   integer :: in_shape(2)
+   integer, parameter :: in_layout(2) = [1, 2]
+   integer, parameter :: out_dims = 2
+   integer :: out_shape(2)
+   integer, parameter :: out_layout(2) = [1, 2]
+
    real(r8) :: math_pi
 
    math_pi = 3.14159265358979323846_r8
+   in_shape = [pcols, inputlength]
+   out_shape = [pcols, outputlength]
 
    ncol  = state%ncol
    call cnst_get_ind('CLDLIQ', ixcldliq)
@@ -270,24 +297,49 @@ end select
 
 
     ! do the torch inference    
-    input_torch(:,:) = 0.
+    ! input_torch(:,:) = 0.
+    ! do i=1,ncol
+    !   do k=1,inputlength
+    !     input_torch(k,i) = input(i,k)
+    !   end do
+    ! end do
+    ! !print *, "Creating input tensor"
+    ! call input_tensors%create
+    ! !print *, "Adding input data"
+    ! call input_tensors%add_array(input_torch)
+    ! call torch_mod(1)%forward(input_tensors, out_tensor, flags=module_use_inference_mode)
+    ! call out_tensor%to_array(output_torch)
+    ! do i=1, ncol
+    !   do k=1,outputlength
+    !     output(i,k) = output_torch(k,i)
+    !   end do
+    ! end do
+
+    ! inference with ftorch
+    in_data(:,:) = 0.
     do i=1,ncol
       do k=1,inputlength
-        input_torch(k,i) = input(i,k)
-      end do
-    end do
-    !print *, "Creating input tensor"
-    call input_tensors%create
-    !print *, "Adding input data"
-    call input_tensors%add_array(input_torch)
-    call torch_mod(1)%forward(input_tensors, out_tensor, flags=module_use_inference_mode)
-    call out_tensor%to_array(output_torch)
-    do i=1, ncol
-      do k=1,outputlength
-        output(i,k) = output_torch(k,i)
+        in_data(i,k) = input(i,k)
       end do
     end do
 
+    call t_startf ('nn_inference')
+    if (cb_use_cuda) then
+      call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    else
+      call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCPU)
+    end if
+    !call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    !call torch_tensor_from_array(in_tensors(1), in_data, in_layout, torch_kCUDA)
+    call torch_tensor_from_array(out_tensors(1), out_data, out_layout, torch_kCPU)
+    call torch_model_forward(model, in_tensors, out_tensors)
+    call t_stopf ('nn_inference')
+
+    do i=1, ncol
+      do k=1,outputlength
+        output(i,k) = out_data(i,k)
+      end do
+    end do
 
     !!! do post processing some non-negative constraints + option to do stratosphere water denial
 
@@ -431,9 +483,16 @@ end subroutine neural_net
 
     integer :: i, k
 
-    allocate(torch_mod (1))
-    call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
+    ! allocate(torch_mod (1))
+    ! call torch_mod(1)%load(trim(cb_torch_model), 0) !0 is not using gpu, for now just use cpu for NN inference
     !call torch_mod(1)%load(trim(cb_torch_model), module_use_device) will use gpu if available
+    if (cb_use_cuda) then
+      call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
+    else
+      call torch_model_load(model, trim(cb_torch_model), torch_kCPU)
+    end if
+    ! call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
+    !call torch_model_load(model, trim(cb_torch_model), torch_kCUDA)
     
   ! add diagnostic output fileds
   call addfld ('TROP_IND',horiz_only,   'A', '1', 'lev index for tropopause')
@@ -544,7 +603,7 @@ end subroutine neural_net
                            cb_partial_coupling, cb_partial_coupling_vars,&
                            cb_use_input_prectm1, &
                            cb_nn_var_combo, &
-                           cb_torch_model, cb_spinup_step, &
+                           cb_torch_model, cb_use_cuda, cb_spinup_step, &
                            cb_do_ramp, cb_ramp_linear_steps, &
                            cb_ramp_option, cb_ramp_factor, cb_ramp_step_0steps, cb_ramp_step_1steps, &
                            cb_strato_water_constraint, dtheta_thred
@@ -588,6 +647,7 @@ end subroutine neural_net
       call mpibcast(cb_ramp_step_1steps, 1,            mpiint,  0, mpicom)
       call mpibcast(cb_strato_water_constraint,   1, mpilog,  0, mpicom)
       call mpibcast(dtheta_thred, 1,            mpir8,  0, mpicom)
+      call mpibcast(cb_use_cuda, 1,                  mpilog,  0, mpicom)
 
 
       ! [TODO] check ierr for each mpibcast call
