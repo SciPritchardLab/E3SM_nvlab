@@ -181,7 +181,7 @@ contains
 
 select case (to_lower(trim(cb_nn_var_combo)))
 
-    case('v2')
+    case('v2', 'v2_conf')
       input(:ncol,0*pver+1:1*pver) = state%t(1:ncol,1:pver)          ! state_t
       input(:ncol,1*pver+1:2*pver) = state%q(1:ncol,1:pver,1)        ! state_q0001
       input(:ncol,2*pver+1:3*pver) = state%q(1:ncol,1:pver,ixcldliq)
